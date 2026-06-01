@@ -464,7 +464,7 @@ const CONN = {
   'USB-A 2.0':   ['gnd','vbus','d'],
   'Type-B 3.0':  ['gnd','vbus','d','ss1','ss2'],
   'Micro-B 3.0': ['gnd','vbus','d','ss1','ss2'],
-  'Mini-B 2.0':  ['gnd','vbus','d'],
+  'Mini-B 3.0':  ['gnd','vbus','d','ss1','ss2'],
   'Micro-B 2.0': ['gnd','vbus','d'],
   'Lightning':   ['gnd','vbus','d'],
 };
@@ -472,7 +472,7 @@ const CONN = {
 // Top edge is power-in only; bottom edge is the test point — no cable ports.
 const portGroups = {
   left:  { 'Left': ['USB-A 3.0', 'USB-A 2.0', 'USB-C 3.0'] },
-  right: { 'Right': ['USB-C 3.0', 'Type-B 3.0', 'Micro-B 3.0', 'Mini-B 2.0', 'Lightning', 'Micro-B 2.0'] },
+  right: { 'Right': ['Type-B 3.0', 'USB-C 3.0', 'Micro-B 3.0', 'Mini-B 3.0', 'Lightning', 'Micro-B 2.0'] },
 };
 const ports = {
   left:  Object.values(portGroups.left).flat(),
