@@ -395,19 +395,19 @@ function availableTypes() {
 }
 function applyConstraints() {
   const avail = availableTypes();
-  document.querySelectorAll(‘.pill’).forEach(el => {
+  document.querySelectorAll('.pill').forEach(el => {
     const ok = avail.has(el.dataset.type);
-    el.classList.toggle(‘disabled’, !ok);
-    if (!ok && el.classList.contains(‘on’)) {
-      el.classList.remove(‘on’);
+    el.classList.toggle('disabled', !ok);
+    if (!ok && el.classList.contains('on')) {
+      el.classList.remove('on');
       lit.delete(el.dataset.id);
     }
   });
-  const lost = [‘cc’,’ss1’,’ss2’,’sbu’].filter(t => !avail.has(t));
-  const hint = document.getElementById(‘hint’);
+  const lost = ['cc','ss1','ss2','sbu'].filter(t => !avail.has(t));
+  const hint = document.getElementById('hint');
   hint.textContent = lost.length
-    ? ‘Greyed pins are not present on ‘ + selected.left + ‘ → ‘ + selected.right + ‘, so they can never light.’
-    : ‘USB-C on both ends — every pin is available.’;
+    ? 'Greyed pins are not present on ' + selected.left + ' → ' + selected.right + ', so they can never light.'
+    : 'USB-C on both ends — every pin is available.';
   updateSelectAllLabel();
 }
 
@@ -426,7 +426,7 @@ function identify() {
   if (count === 0) {
     return {
       type: 'No cable / bad connection', bandwidth: '—', charging: 'No',
-      confidence: 'none', confLabel: '—', confReason: 'Nothing lit, so there’s nothing to identify.',
+      confidence: 'none', confLabel: '—', confReason: 'Nothing lit — nothing to identify.',
       caveats: ['No pins lit. Either nothing is plugged in, the cable is fully broken, or there is a bad connection.'],
       pins: []
     };
@@ -436,16 +436,16 @@ function identify() {
   const caveats = [];
 
   if (hasBothSS) {
-    type = ‘USB 3.2 dual-lane or Thunderbolt 3/4’;
-    bandwidth = ‘20 Gbps (USB 3.2 Gen 2×2) or 40 Gbps (Thunderbolt)’;
-    confidence = ‘low’;
-    confReason = ‘These pins are identical for USB 3.2 Gen 2×2 and Thunderbolt 3/4. Look for a ⚡ marking on the cable to confirm Thunderbolt.’;
+    type = 'USB 3.2 dual-lane or Thunderbolt 3/4';
+    bandwidth = '20 Gbps (USB 3.2 Gen 2×2) or 40 Gbps (Thunderbolt)';
+    confidence = 'low';
+    confReason = 'These pins are identical for USB 3.2 Gen 2×2 and Thunderbolt 3/4. Look for a ⚡ marking on the cable to confirm Thunderbolt.';
   } else if (hasAnySS) {
-    type = ‘USB 3.2 single-lane’;
-    bandwidth = ‘5 or 10 Gbps’;
-    confidence = ‘med’;
-    confReason = ‘Cable family is clear, but Gen 1 (5 Gbps) and Gen 2 (10 Gbps) wire identically — the difference is conductor quality.’;
-    caveats.push(‘One SuperSpeed pair present. Can’t distinguish Gen 1 (5 Gbps) from Gen 2 (10 Gbps) from pins alone.’);
+    type = 'USB 3.2 single-lane';
+    bandwidth = '5 or 10 Gbps';
+    confidence = 'med';
+    confReason = 'Cable family is clear, but Gen 1 (5 Gbps) and Gen 2 (10 Gbps) wire identically — the difference is conductor quality.';
+    caveats.push('One SuperSpeed pair present. Cannot distinguish Gen 1 (5 Gbps) from Gen 2 (10 Gbps) from pins alone.');
     if (!p.d) caveats.push('SuperSpeed lanes present but no USB 2.0 D+/D− pair — unusual; most cables include it.');
   } else if (p.d) {
     type = 'USB 2.0';
