@@ -270,7 +270,7 @@
     transition: background .12s, border-color .12s, color .12s;
     padding: 0;
   }
-  .saved-chip:hover { background: #2f2f2c; border-color: var(--warn); color: var(--ink); }
+  .saved-chip:hover { background: var(--panel); border-color: var(--warn); color: var(--ink); }
   .saved-chip .chip-label { padding: 6px 4px 6px 14px; }
   .saved-chip .chip-del {
     padding: 6px 10px 6px 2px; color: var(--ink3); font-size: 0.9rem; line-height: 1;
@@ -709,11 +709,18 @@ function renderSaved() {
   list.forEach((p, i) => {
     const chip = document.createElement('div');
     chip.className = 'saved-chip';
-    chip.innerHTML =
-      '<span class="chip-label">' + p.label + '</span>' +
-      '<button class="chip-del" title="Delete" aria-label="Delete preset">&times;</button>';
-    chip.querySelector('.chip-label').addEventListener('click', () => applySavedPreset(p));
-    chip.querySelector('.chip-del').addEventListener('click', e => {
+    const chipLbl = document.createElement('span');
+    chipLbl.className = 'chip-label';
+    chipLbl.textContent = p.label;
+    const chipDel = document.createElement('button');
+    chipDel.className = 'chip-del';
+    chipDel.title = 'Delete';
+    chipDel.setAttribute('aria-label', 'Delete preset');
+    chipDel.textContent = '×';
+    chip.appendChild(chipLbl);
+    chip.appendChild(chipDel);
+    chipLbl.addEventListener('click', () => applySavedPreset(p));
+    chipDel.addEventListener('click', e => {
       e.stopPropagation();
       const updated = loadSaved().filter((_, j) => j !== i);
       storeSaved(updated);
