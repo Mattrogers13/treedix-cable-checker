@@ -253,6 +253,61 @@
     z-index: 10;
   }
   .theme-toggle:hover { color: var(--ink); border-color: var(--port-b); }
+
+  /* ---- Saved presets ---- */
+  .saved-section { text-align: center; margin: 10px auto 0; max-width: 560px; }
+  .saved-section .lbl {
+    font-size: 0.66rem; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--ink3); margin-bottom: 7px;
+  }
+  .saved-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .saved-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--edge); border-radius: 20px;
+    background: var(--board); color: var(--ink2);
+    font: inherit; font-size: 0.76rem; font-weight: 600;
+    cursor: pointer; user-select: none;
+    transition: background .12s, border-color .12s, color .12s;
+    padding: 0;
+  }
+  .saved-chip:hover { background: #2f2f2c; border-color: var(--warn); color: var(--ink); }
+  .saved-chip .chip-label { padding: 6px 4px 6px 14px; }
+  .saved-chip .chip-del {
+    padding: 6px 10px 6px 2px; color: var(--ink3); font-size: 0.9rem; line-height: 1;
+    background: none; border: none; cursor: pointer; font: inherit;
+  }
+  .saved-chip .chip-del:hover { color: var(--bad); }
+
+  .save-panel {
+    display: none; align-items: center; gap: 8px; justify-content: center;
+    margin: 14px auto 0; max-width: 420px;
+    flex-wrap: wrap;
+  }
+  .save-panel.open { display: flex; }
+  .save-panel input {
+    flex: 1 1 160px; min-width: 0;
+    background: var(--board); border: 1px solid var(--edge);
+    border-radius: 8px; padding: 8px 12px;
+    font: inherit; font-size: 0.82rem; color: var(--ink);
+    outline: none; transition: border-color .12s;
+  }
+  .save-panel input:focus { border-color: var(--warn); }
+  .save-panel input::placeholder { color: var(--ink3); }
+  .btn-save-confirm {
+    background: var(--warn); color: #2a1500; border: none;
+    border-radius: 8px; padding: 8px 16px;
+    font: inherit; font-size: 0.82rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-save-confirm:hover { filter: brightness(1.08); }
+  .btn-save-cancel {
+    background: none; border: 1px solid var(--edge); border-radius: 8px;
+    padding: 8px 12px; font: inherit; font-size: 0.82rem;
+    color: var(--ink3); cursor: pointer;
+  }
+  .btn-save-cancel:hover { color: var(--ink); border-color: var(--port-b); }
+  .btn-savepreset { background: transparent; color: var(--ink2); border-color: var(--edge); }
+  .btn-savepreset:hover { background: var(--board); color: var(--ink); border-color: var(--port-b); }
 </style>
 </head>
 <body>
@@ -307,7 +362,19 @@
   <div class="controls">
     <button class="act btn-reset" id="reset">Reset</button>
     <button class="act btn-selectall" id="selectall">Select all pins</button>
+    <button class="act btn-savepreset" id="savepreset">Save preset</button>
     <button class="act btn-submit" id="submit">Identify cable</button>
+  </div>
+
+  <div class="save-panel" id="savePanel">
+    <input type="text" id="presetLabel" maxlength="30" placeholder="Label this cable…">
+    <button class="btn-save-confirm" id="saveConfirm">Save</button>
+    <button class="btn-save-cancel" id="saveCancel">Cancel</button>
+  </div>
+
+  <div class="saved-section" id="savedSection" style="display:none">
+    <div class="lbl">My presets</div>
+    <div class="saved-chips" id="savedChips"></div>
   </div>
 
   <div class="result" id="result" aria-live="polite"></div>
@@ -620,6 +687,85 @@ document.getElementById('reset').addEventListener('click', () => {
 buildPorts('ports-left', portGroups.left, 'left');
 buildPorts('ports-right', portGroups.right, 'right');
 applyConstraints();
+
+// ---- Saved presets (localStorage, max 5) ----
+const STORAGE_KEY = 'usbCheckerPresets';
+const MAX_SAVED = 5;
+
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return []; }
+}
+function storeSaved(list) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+}
+
+function renderSaved() {
+  const list = loadSaved();
+  const section = document.getElementById('savedSection');
+  const chips = document.getElementById('savedChips');
+  section.style.display = list.length ? '' : 'none';
+  chips.innerHTML = '';
+  list.forEach((p, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'saved-chip';
+    chip.innerHTML =
+      '<span class="chip-label">' + p.label + '</span>' +
+      '<button class="chip-del" title="Delete" aria-label="Delete preset">&times;</button>';
+    chip.querySelector('.chip-label').addEventListener('click', () => applySavedPreset(p));
+    chip.querySelector('.chip-del').addEventListener('click', e => {
+      e.stopPropagation();
+      const updated = loadSaved().filter((_, j) => j !== i);
+      storeSaved(updated);
+      renderSaved();
+    });
+    chips.appendChild(chip);
+  });
+  // Disable save button when at limit
+  document.getElementById('savepreset').disabled = list.length >= MAX_SAVED;
+}
+
+function applySavedPreset(p) {
+  selected.left = p.left; selected.right = p.right;
+  buildPorts('ports-left', portGroups.left, 'left');
+  buildPorts('ports-right', portGroups.right, 'right');
+  applyConstraints();
+  lit.clear();
+  document.querySelectorAll('.pill').forEach(el => el.classList.remove('on'));
+  p.litIds.forEach(id => {
+    const el = document.querySelector('.pill[data-id="' + id + '"]');
+    if (el && !el.classList.contains('disabled')) { el.classList.add('on'); lit.add(id); }
+  });
+  updateSelectAllLabel();
+  clearResult();
+}
+
+// Save panel wiring
+const savePanel = document.getElementById('savePanel');
+const presetLabelInput = document.getElementById('presetLabel');
+
+document.getElementById('savepreset').addEventListener('click', () => {
+  savePanel.classList.add('open');
+  presetLabelInput.value = '';
+  presetLabelInput.focus();
+});
+document.getElementById('saveCancel').addEventListener('click', () => {
+  savePanel.classList.remove('open');
+});
+function confirmSave() {
+  const label = presetLabelInput.value.trim();
+  if (!label) { presetLabelInput.focus(); return; }
+  const list = loadSaved();
+  if (list.length >= MAX_SAVED) return;
+  list.push({ label, left: selected.left, right: selected.right, litIds: [...lit] });
+  storeSaved(list);
+  savePanel.classList.remove('open');
+  renderSaved();
+}
+document.getElementById('saveConfirm').addEventListener('click', confirmSave);
+presetLabelInput.addEventListener('keydown', e => { if (e.key === 'Enter') confirmSave(); });
+
+renderSaved();
 
 // ---- Theme toggle ----
 const themeBtn = document.getElementById('themeToggle');
