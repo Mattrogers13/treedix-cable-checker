@@ -159,6 +159,34 @@
     border-color: var(--edge2);
   }
 
+  /* ---- Extra indicators (Shield + ID) ---- */
+  .indicators {
+    display: flex; gap: 10px; justify-content: center;
+    padding-top: 12px; margin-top: 4px;
+    border-top: 1px dashed var(--edge);
+  }
+  .indicator {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    border: 1px solid var(--port-b); border-radius: 5px;
+    padding: 5px 14px; cursor: pointer; user-select: none;
+    background: var(--port); color: var(--ink2);
+    font-size: 0.78rem; font-weight: 600;
+    filter: brightness(0.8) saturate(0.7); opacity: 0.85;
+    transition: filter .12s, opacity .12s, box-shadow .12s;
+  }
+  .indicator:hover { filter: brightness(1) saturate(1); opacity: 1; }
+  .indicator.on {
+    filter: brightness(1.1) saturate(1); opacity: 1;
+    background: #2e2918; border-color: #d4af3a;
+    color: #f0d87a;
+    box-shadow: 0 0 8px 0 #d4af3a, 0 0 16px 2px rgba(212,175,58,0.4);
+  }
+  .indicator .ind-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: currentColor; opacity: 0.6; flex: 0 0 auto;
+  }
+  .indicator.on .ind-dot { opacity: 1; }
+
   .t-gnd  { --fill:#444441; --bd:#b4b2a9; --tx:#d3d1c7; }
   .t-vbus { --fill:#633806; --bd:#ef9f27; --tx:#fac775; }
   .t-ss   { --fill:#0c447c; --bd:#85b7eb; --tx:#b5d4f4; }
@@ -344,6 +372,15 @@
         <div class="ports" id="ports-right"></div>
       </div>
     </div>
+
+    <div class="indicators">
+      <div class="indicator" id="ind-shield" title="Cable shield / drain wire">
+        <span class="ind-dot"></span>Shield
+      </div>
+      <div class="indicator" id="ind-id" title="ID pin (OTG / identification)">
+        <span class="ind-dot"></span>ID
+      </div>
+    </div>
   </div>
 
   <p class="hint" id="hint"></p>
@@ -427,7 +464,7 @@ const CONN = {
   'USB-A 2.0':   ['gnd','vbus','d'],
   'Type-B 3.0':  ['gnd','vbus','d','ss1','ss2'],
   'Micro-B 3.0': ['gnd','vbus','d','ss1','ss2'],
-  'Mini-B 2.0':  ['gnd','vbus','d'],
+  'Mini-B 3.0':  ['gnd','vbus','d','ss1','ss2'],
   'Micro-B 2.0': ['gnd','vbus','d'],
   'Lightning':   ['gnd','vbus','d'],
 };
@@ -435,7 +472,7 @@ const CONN = {
 // Top edge is power-in only; bottom edge is the test point — no cable ports.
 const portGroups = {
   left:  { 'Left': ['USB-A 3.0', 'USB-A 2.0', 'USB-C 3.0'] },
-  right: { 'Right': ['USB-C 3.0', 'Type-B 3.0', 'Micro-B 3.0', 'Mini-B 2.0', 'Lightning', 'Micro-B 2.0'] },
+  right: { 'Right': ['Type-B 3.0', 'USB-C 3.0', 'Micro-B 3.0', 'Mini-B 3.0', 'Lightning', 'Micro-B 2.0'] },
 };
 const ports = {
   left:  Object.values(portGroups.left).flat(),
@@ -446,6 +483,17 @@ const CIRC = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪',
 const typeClass = { gnd:'t-gnd', vbus:'t-vbus', ss1:'t-ss', ss2:'t-ss', d:'t-d', cc:'t-cc', sbu:'t-sbu' };
 const lit = new Set();
 const selected = { left: 'USB-C 3.0', right: 'USB-C 3.0' };
+const extra = { shield: false, id: false };
+
+// Wire indicator toggles
+['shield','id'].forEach(key => {
+  const el = document.getElementById('ind-' + key);
+  el.addEventListener('click', () => {
+    extra[key] = !extra[key];
+    el.classList.toggle('on', extra[key]);
+    clearResult();
+  });
+});
 
 function connSub(conn) {
   if (conn === 'USB-C 3.0') return 'full pinout';
@@ -593,6 +641,10 @@ function identify() {
   if ((p.d || hasAnySS) && !p.cc && availableTypes().has('cc')) caveats.push('No CC (configuration channel) pins lit — unusual for a full USB-C cable; orientation and power-delivery negotiation pins are missing.');
   if (!p.gnd && count > 0) caveats.push('No ground pins lit — ground should always be present on a working cable; check the connection.');
 
+  if (extra.shield) caveats.push('Shield / drain wire present — cable has a connected shield braid. Expected on quality USB 3.x cables; its absence on a SuperSpeed cable may indicate signal integrity issues.');
+  else if (hasAnySS) caveats.push('Shield / drain wire not lit — no shielding detected. Unusual for a USB 3.x cable; cheap or thin cables sometimes omit the shield.');
+  if (extra.id) caveats.push('ID pin present — cable carries an identification or OTG signal. Common on shielded USB 3.x cables and OTG-capable cables.');
+
   const order = [['gnd','GND'],['vbus','VBUS'],['cc','CC'],['d','D+/D−'],['ss1','SuperSpeed 1'],['ss2','SuperSpeed 2'],['sbu','SBU']];
   const pins = order.filter(([k]) => p[k]).map(([,label]) => label);
 
@@ -680,6 +732,9 @@ selBtn.addEventListener('click', () => {
 document.getElementById('reset').addEventListener('click', () => {
   lit.clear();
   document.querySelectorAll('.pill.on').forEach(el => el.classList.remove('on'));
+  extra.shield = false; extra.id = false;
+  document.getElementById('ind-shield').classList.remove('on');
+  document.getElementById('ind-id').classList.remove('on');
   updateSelectAllLabel();
   clearResult();
 });
@@ -743,6 +798,9 @@ function applySavedPreset(p) {
     const el = document.querySelector('.pill[data-id="' + id + '"]');
     if (el && !el.classList.contains('disabled')) { el.classList.add('on'); lit.add(id); }
   });
+  extra.shield = !!p.shield; extra.id = !!p.id;
+  document.getElementById('ind-shield').classList.toggle('on', extra.shield);
+  document.getElementById('ind-id').classList.toggle('on', extra.id);
   updateSelectAllLabel();
   clearResult();
 }
@@ -764,7 +822,7 @@ function confirmSave() {
   if (!label) { presetLabelInput.focus(); return; }
   const list = loadSaved();
   if (list.length >= MAX_SAVED) return;
-  list.push({ label, left: selected.left, right: selected.right, litIds: [...lit] });
+  list.push({ label, left: selected.left, right: selected.right, litIds: [...lit], shield: extra.shield, id: extra.id });
   storeSaved(list);
   savePanel.classList.remove('open');
   renderSaved();
