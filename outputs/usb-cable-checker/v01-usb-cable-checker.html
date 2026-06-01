@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>USB Cable Checker — Treedix Board Emulator</title>
+<style>
+  :root {
+    --board:      #0d2b22;
+    --board-edge: #0a1f19;
+    --silk:       #d8e6df;
+    --silk-dim:   #6f8a80;
+    --copper:     #c98a3a;
+    --led-off:    #2a1606;
+    --led-on:     #ff9a1f;
+    --led-glow:   #ff7a00;
+    --gnd:  #9aa0a6;
+    --vbus: #f0a020;
+    --ss:   #4f9dff;
+    --d:    #16c2a3;
+    --cc:   #ff7a5c;
+    --sbu:  #b069f0;
+    --ok:   #36c46a;
+    --warn: #f0a020;
+    --bad:  #ff5d5d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(circle at 50% 0%, #16201c 0%, #0a0d0c 60%, #060807 100%);
+    color: var(--silk);
+    min-height: 100vh;
+    padding: 28px 16px 64px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  header { text-align: center; margin-bottom: 22px; }
+  header h1 { font-size: 1.5rem; margin: 0 0 4px; letter-spacing: 0.5px; }
+  header p { margin: 0; color: var(--silk-dim); font-size: 0.85rem; }
+
+  /* ---- Board ---- */
+  .board {
+    background:
+      linear-gradient(180deg, var(--board) 0%, var(--board-edge) 100%);
+    border: 1px solid #1c4a3b;
+    border-radius: 14px;
+    padding: 22px 18px 26px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.04),
+      0 18px 40px rgba(0,0,0,0.55);
+    position: relative;
+  }
+  .board::before, .board::after {
+    content: "";
+    position: absolute;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #2c4d42, #08120e);
+    box-shadow: inset 0 0 2px #000;
+  }
+  .board::before { top: 10px; left: 10px; }
+  .board::after  { top: 10px; right: 10px; }
+
+  .port {
+    text-align: center;
+    color: var(--silk-dim);
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin: 2px 0 14px;
+  }
+  .port-pill {
+    display: inline-block;
+    width: 88px; height: 12px;
+    background: #060a08;
+    border: 1px solid #2c4d42;
+    border-radius: 8px;
+    margin-bottom: 6px;
+  }
+
+  /* ---- LED grid ---- */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 6px 12px;
+    align-items: stretch;
+  }
+  .col-head {
+    text-align: center;
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+    color: var(--silk-dim);
+    text-transform: uppercase;
+    padding-bottom: 6px;
+  }
+  .rownum {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.68rem; color: var(--silk-dim);
+    min-width: 20px;
+  }
+
+  .led {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    background: #0a1813;
+    border: 1px solid #1c3a30;
+    border-left-width: 4px;
+    border-radius: 8px;
+    padding: 7px 9px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .12s, border-color .12s, transform .04s;
+  }
+  .led.right { flex-direction: row-reverse; text-align: right; }
+  .led:hover { background: #0f2219; }
+  .led:active { transform: scale(0.985); }
+  .led .dot {
+    width: 15px; height: 15px; border-radius: 50%;
+    background: var(--led-off);
+    border: 1px solid #4a2a10;
+    flex: 0 0 auto;
+    box-shadow: inset 0 0 3px rgba(0,0,0,0.8);
+    transition: background .12s, box-shadow .12s, border-color .12s;
+  }
+  .led .name {
+    font-size: 0.82rem; font-weight: 600; color: var(--silk-dim);
+    font-variant-numeric: tabular-nums;
+    transition: color .12s;
+  }
+  .led .name small { display:block; font-size:0.6rem; font-weight:600; letter-spacing:0.5px; opacity:0.7; }
+
+  .led.on { background: #251403; border-color: #6b3d0e; }
+  .led.on .dot {
+    background: var(--led-on);
+    border-color: #ffd089;
+    box-shadow: 0 0 6px 1px var(--led-glow), 0 0 14px 2px rgba(255,122,0,0.5), inset 0 0 3px #fff3;
+  }
+  .led.on .name { color: #ffe6c2; }
+
+  /* type accent on left border */
+  .t-gnd  { border-left-color: var(--gnd); }
+  .t-vbus { border-left-color: var(--vbus); }
+  .t-ss   { border-left-color: var(--ss); }
+  .t-d    { border-left-color: var(--d); }
+  .t-cc   { border-left-color: var(--cc); }
+  .t-sbu  { border-left-color: var(--sbu); }
+
+  /* ---- Legend ---- */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 6px 14px;
+    justify-content: center;
+    margin: 16px auto 0;
+    font-size: 0.72rem; color: var(--silk-dim);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display:inline-block; }
+
+  /* ---- Controls ---- */
+  .controls { display: flex; gap: 12px; justify-content: center; margin: 22px 0 6px; }
+  button.act {
+    font: inherit; font-weight: 600;
+    padding: 11px 26px; border-radius: 9px; cursor: pointer;
+    border: 1px solid transparent; transition: filter .12s, transform .04s;
+  }
+  button.act:active { transform: translateY(1px); }
+  .btn-reset { background: #1a2420; color: var(--silk); border-color: #2c4d42; }
+  .btn-reset:hover { filter: brightness(1.2); }
+  .btn-submit { background: linear-gradient(180deg, #ff9a1f, #e57a05); color: #2a1500; }
+  .btn-submit:hover { filter: brightness(1.07); }
+
+  /* ---- Result ---- */
+  .result {
+    margin-top: 22px;
+    background: #0c1411;
+    border: 1px solid #1c3a30;
+    border-left-width: 5px;
+    border-radius: 12px;
+    padding: 18px 20px;
+    display: none;
+  }
+  .result.show { display: block; }
+  .result.c-high { border-left-color: var(--ok); }
+  .result.c-med  { border-left-color: var(--warn); }
+  .result.c-low  { border-left-color: var(--bad); }
+  .result.c-none { border-left-color: var(--silk-dim); }
+  .result h2 { margin: 0 0 4px; font-size: 1.2rem; }
+  .result .pins { color: var(--silk-dim); font-size: 0.78rem; margin: 0 0 14px; }
+  .specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 10px; margin-bottom: 14px; }
+  .spec { background: #0a1813; border: 1px solid #1c3a30; border-radius: 8px; padding: 9px 11px; }
+  .spec .k { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 1px; color: var(--silk-dim); }
+  .spec .v { font-size: 0.95rem; font-weight: 600; margin-top: 2px; }
+  .badge { display:inline-block; padding: 1px 8px; border-radius: 20px; font-size: 0.82rem; font-weight: 700; }
+  .badge.c-high { background: rgba(54,196,106,0.18); color: var(--ok); }
+  .badge.c-med  { background: rgba(240,160,32,0.18); color: var(--warn); }
+  .badge.c-low  { background: rgba(255,93,93,0.18); color: var(--bad); }
+  .badge.c-none { background: rgba(111,138,128,0.18); color: var(--silk-dim); }
+  .caveats { margin: 0; padding-left: 18px; }
+  .caveats li { font-size: 0.84rem; color: #b9cbc3; margin-bottom: 6px; line-height: 1.4; }
+
+  footer { text-align: center; color: var(--silk-dim); font-size: 0.72rem; margin-top: 28px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>USB Cable Checker</h1>
+    <p>Treedix board emulator — click the LEDs that light up, then Submit</p>
+  </header>
+
+  <div class="board">
+    <div class="port"><span class="port-pill"></span><br>B-end connector</div>
+
+    <div class="grid">
+      <div class="col-head">Pin Row B</div>
+      <div class="col-head"></div>
+      <div class="col-head">Pin Row A</div>
+      <!-- rows injected by JS -->
+    </div>
+
+    <div class="legend">
+      <span><i style="background:var(--gnd)"></i>GND</span>
+      <span><i style="background:var(--vbus)"></i>VBUS (power)</span>
+      <span><i style="background:var(--ss)"></i>TX/RX (SuperSpeed)</span>
+      <span><i style="background:var(--d)"></i>D+/D− (USB 2.0)</span>
+      <span><i style="background:var(--cc)"></i>CC (config)</span>
+      <span><i style="background:var(--sbu)"></i>SBU (sideband)</span>
+    </div>
+
+    <div class="port" style="margin-top:14px;margin-bottom:0"><span class="port-pill"></span><br>A-end connector</div>
+  </div>
+
+  <div class="controls">
+    <button class="act btn-reset" id="reset">Reset</button>
+    <button class="act btn-submit" id="submit">Submit</button>
+  </div>
+
+  <div class="result" id="result" aria-live="polite"></div>
+
+  <footer>
+    Identifies cable capability from pin continuity only. Cannot judge signal quality,
+    wattage, or certification. Built from the official Treedix manual.
+  </footer>
+</div>
+
+<script>
+// ---- Pin layout (from the official Treedix manual) ----
+// type: gnd | vbus | ss1 | ss2 | d | cc | sbu   (ss1/ss2 = SuperSpeed pairs 1 & 2)
+const rowB = [
+  {n:1,  name:'GND',  type:'gnd'},
+  {n:2,  name:'TX2+', type:'ss2'},
+  {n:3,  name:'TX2−', type:'ss2'},
+  {n:4,  name:'VBUS', type:'vbus'},
+  {n:5,  name:'CC2',  type:'cc'},
+  {n:6,  name:'D+',   type:'d'},
+  {n:7,  name:'D−', type:'d'},
+  {n:8,  name:'SBU2', type:'sbu'},
+  {n:9,  name:'VBUS', type:'vbus'},
+  {n:10, name:'RX1−', type:'ss1'},
+  {n:11, name:'RX1+', type:'ss1'},
+  {n:12, name:'GND',  type:'gnd'},
+];
+const rowA = [
+  {n:12, name:'GND',  type:'gnd'},
+  {n:11, name:'RX2+', type:'ss2'},
+  {n:10, name:'RX2−', type:'ss2'},
+  {n:9,  name:'VBUS', type:'vbus'},
+  {n:8,  name:'SBU1', type:'sbu'},
+  {n:7,  name:'D−', type:'d'},
+  {n:6,  name:'D+',   type:'d'},
+  {n:5,  name:'CC1',  type:'cc'},
+  {n:4,  name:'VBUS', type:'vbus'},
+  {n:3,  name:'TX1−', type:'ss1'},
+  {n:2,  name:'TX1+', type:'ss1'},
+  {n:1,  name:'GND',  type:'gnd'},
+];
+
+const typeClass = { gnd:'t-gnd', vbus:'t-vbus', ss1:'t-ss', ss2:'t-ss', d:'t-d', cc:'t-cc', sbu:'t-sbu' };
+const lit = new Set();             // ids of lit LEDs, e.g. "B1", "A12"
+const grid = document.querySelector('.grid');
+
+function ledEl(side, pin) {
+  const el = document.createElement('div');
+  const id = side + pin.n;
+  el.className = 'led ' + (side === 'A' ? 'right ' : '') + typeClass[pin.type];
+  el.dataset.id = id;
+  el.dataset.type = pin.type;
+  el.innerHTML = '<span class="dot"></span><span class="name">' + pin.name +
+                 '<small>pin ' + pin.n + '</small></span>';
+  el.addEventListener('click', () => {
+    if (lit.has(id)) { lit.delete(id); el.classList.remove('on'); }
+    else { lit.add(id); el.classList.add('on'); }
+  });
+  return el;
+}
+
+// Build 12 rows: [B led][row#][A led]
+for (let i = 0; i < 12; i++) {
+  grid.appendChild(ledEl('B', rowB[i]));
+  const num = document.createElement('div');
+  num.className = 'rownum';
+  num.textContent = rowB[i].n + '·' + rowA[i].n;
+  grid.appendChild(num);
+  grid.appendChild(ledEl('A', rowA[i]));
+}
+
+// ---- Identification ----
+function litTypes() {
+  const present = { gnd:false, vbus:false, ss1:false, ss2:false, d:false, cc:false, sbu:false };
+  document.querySelectorAll('.led.on').forEach(el => { present[el.dataset.type] = true; });
+  return present;
+}
+
+function identify() {
+  const count = lit.size;
+  const p = litTypes();
+  const hasAnySS = p.ss1 || p.ss2;
+  const hasBothSS = p.ss1 && p.ss2;
+
+  if (count === 0) {
+    return {
+      type: 'No cable / bad connection', bandwidth: '—', charging: 'No',
+      confidence: 'none', confLabel: '—',
+      caveats: ['No LEDs lit. Either nothing is plugged in, the cable is fully broken, or there is a bad connection.'],
+      pins: []
+    };
+  }
+
+  let type, bandwidth, confidence;
+  const caveats = [];
+
+  if (hasBothSS) {
+    type = 'USB 3.2 dual-lane or Thunderbolt 3/4';
+    bandwidth = '20 Gbps (USB 3.2 Gen 2×2) or 40 Gbps (Thunderbolt)';
+    confidence = 'low';
+    caveats.push('Both SuperSpeed pairs are present. USB 3.2 Gen 2×2 and Thunderbolt 3/4 share this exact pin pattern — look for a ⚡ marking on the cable to confirm Thunderbolt.');
+  } else if (hasAnySS) {
+    type = 'USB 3.2 single-lane';
+    bandwidth = '5 or 10 Gbps';
+    confidence = 'med';
+    caveats.push('One SuperSpeed pair present. Can’t tell Gen 1 (5 Gbps) from Gen 2 (10 Gbps) — identical pinout; the difference is conductor quality.');
+    if (!p.d) caveats.push('SuperSpeed lanes present but no USB 2.0 D+/D− pair — unusual; most cables include it.');
+  } else if (p.d) {
+    type = 'USB 2.0';
+    bandwidth = 'Up to 480 Mbps';
+    confidence = 'high';
+    caveats.push('USB 2.0 data pair (D+/D−) present with no SuperSpeed lanes — covers most phone and basic data cables.');
+  } else if (p.vbus) {
+    type = 'Charge-only cable';
+    bandwidth = 'No data';
+    confidence = 'high';
+    caveats.push('Only power and ground pins are present. This cable can charge a device but carries no data.');
+  } else {
+    type = 'Incomplete / non-standard';
+    bandwidth = '—';
+    confidence = 'low';
+    caveats.push('Ground is present but no power or data lines — likely a broken cable or a partial connection.');
+  }
+
+  // Cross-cutting notes
+  if (p.sbu) caveats.push('Sideband (SBU) pins present — cable is alternate-mode capable (DisplayPort, Thunderbolt sideband, or USB4).');
+  if ((p.d || hasAnySS) && !p.cc) caveats.push('No CC (configuration channel) pins lit — unusual for a full USB-C cable; orientation and power-delivery negotiation pins are missing.');
+  if (!p.gnd && count > 0) caveats.push('No ground pins lit — ground should always be present on a working cable; check the connection.');
+
+  const order = [['gnd','GND'],['vbus','VBUS'],['cc','CC'],['d','D+/D−'],['ss1','SuperSpeed 1'],['ss2','SuperSpeed 2'],['sbu','SBU']];
+  const pins = order.filter(([k]) => p[k]).map(([,label]) => label);
+
+  const confLabel = { high:'High', med:'Medium', low:'Low' }[confidence];
+  return { type, bandwidth, charging: p.vbus ? 'Yes' : 'No', confidence, confLabel, caveats, pins };
+}
+
+function render(r) {
+  const box = document.getElementById('result');
+  const cls = { high:'c-high', med:'c-med', low:'c-low', none:'c-none' }[r.confidence];
+  box.className = 'result show ' + cls;
+  const pinsLine = r.pins.length ? 'Pins detected: ' + r.pins.join(', ') : '';
+  box.innerHTML =
+    '<h2>' + r.type + '</h2>' +
+    (pinsLine ? '<p class="pins">' + pinsLine + '</p>' : '') +
+    '<div class="specs">' +
+      '<div class="spec"><div class="k">Bandwidth</div><div class="v">' + r.bandwidth + '</div></div>' +
+      '<div class="spec"><div class="k">Charging</div><div class="v">' + r.charging + '</div></div>' +
+      '<div class="spec"><div class="k">Confidence</div><div class="v"><span class="badge ' + cls + '">' + r.confLabel + '</span></div></div>' +
+    '</div>' +
+    '<ul class="caveats">' + r.caveats.map(c => '<li>' + c + '</li>').join('') + '</ul>';
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+document.getElementById('submit').addEventListener('click', () => render(identify()));
+document.getElementById('reset').addEventListener('click', () => {
+  lit.clear();
+  document.querySelectorAll('.led.on').forEach(el => el.classList.remove('on'));
+  const box = document.getElementById('result');
+  box.className = 'result';
+  box.innerHTML = '';
+});
+</script>
+</body>
+</html>
