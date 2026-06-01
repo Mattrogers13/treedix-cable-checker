@@ -20,6 +20,18 @@
     --warn: #ef9f27;
     --bad:  #f0997b;
   }
+  [data-theme="light"] {
+    --page:   #f2f1ed;
+    --board:  #ffffff;
+    --panel:  #f8f7f3;
+    --edge:   rgba(60, 58, 50, 0.18);
+    --edge2:  rgba(60, 58, 50, 0.10);
+    --ink:    #1a1917;
+    --ink2:   #3c3a32;
+    --ink3:   #7a7870;
+    --port:   #e0dfd8;
+    --port-b: #b4b2a9;
+  }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
@@ -94,6 +106,11 @@
   }
   .port small { display: block; color: var(--ink3); font-size: 0.6rem; margin-top: 2px; }
   .port.active small { color: var(--warn); opacity: 0.9; }
+  .port-group-label {
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--ink3);
+    padding: 4px 4px 2px; opacity: 0.7;
+  }
 
   /* ---- Center: two pin columns + divider, headers tracking each column ---- */
   /* mobile-first: columns share width so pills grow to fill / stay tappable */
@@ -225,9 +242,21 @@
   .caveats li { font-size: 0.83rem; color: var(--ink2); margin-bottom: 6px; line-height: 1.45; }
 
   footer { text-align: center; color: var(--ink3); font-size: 0.72rem; margin-top: 26px; line-height: 1.5; }
+
+  .theme-toggle {
+    position: fixed; top: 14px; right: 16px;
+    background: var(--board); border: 1px solid var(--edge);
+    border-radius: 20px; padding: 5px 12px;
+    font: inherit; font-size: 0.72rem; font-weight: 600;
+    color: var(--ink3); cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+    z-index: 10;
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--port-b); }
 </style>
 </head>
 <body>
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode">Light</button>
 <div class="wrap">
   <header>
     <h1>USB Cable Checker</h1>
@@ -321,19 +350,29 @@ const rowA = [
   {n:1,  name:'GND',  type:'gnd'},
 ];
 
-// Functional pin types each connector physically carries.
+// Functional pin types each connector exposes on the Treedix board.
+// USB-A 3.0, Type-B 3.0, and Micro-B 3.0 include ss2 because USB-C cables wire
+// both SuperSpeed pairs on the USB-C end to support plug reversibility.
+// CC only lights on USB-C to USB-C cables (confirmed in Treedix manual table 6).
 const CONN = {
   'USB-C 3.0':   ['gnd','vbus','cc','d','ss1','ss2','sbu'],
-  'USB-A 3.0':   ['gnd','vbus','d','ss1'],
+  'USB-A 3.0':   ['gnd','vbus','d','ss1','ss2'],
   'USB-A 2.0':   ['gnd','vbus','d'],
-  'Micro-B 3.0': ['gnd','vbus','d','ss1'],
+  'Type-B 3.0':  ['gnd','vbus','d','ss1','ss2'],
+  'Micro-B 3.0': ['gnd','vbus','d','ss1','ss2'],
   'Mini-B 2.0':  ['gnd','vbus','d'],
   'Micro-B 2.0': ['gnd','vbus','d'],
   'Lightning':   ['gnd','vbus','d'],
 };
+// Left = USB Port 1 (A-end). Right = USB Port 2 (B-end).
+// Top edge is power-in only; bottom edge is the test point — no cable ports.
+const portGroups = {
+  left:  { 'Left': ['USB-A 3.0', 'USB-A 2.0', 'USB-C 3.0'] },
+  right: { 'Right': ['USB-C 3.0', 'Type-B 3.0', 'Micro-B 3.0', 'Mini-B 2.0', 'Lightning', 'Micro-B 2.0'] },
+};
 const ports = {
-  left:  ['USB-A 3.0', 'USB-A 2.0', 'USB-C 3.0'],
-  right: ['USB-C 3.0', 'Micro-B 3.0', 'Mini-B 2.0', 'Micro-B 2.0', 'Lightning'],
+  left:  Object.values(portGroups.left).flat(),
+  right: Object.values(portGroups.right).flat(),
 };
 
 const CIRC = ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩','⑪','⑫'];
@@ -341,24 +380,40 @@ const typeClass = { gnd:'t-gnd', vbus:'t-vbus', ss1:'t-ss', ss2:'t-ss', d:'t-d',
 const lit = new Set();
 const selected = { left: 'USB-C 3.0', right: 'USB-C 3.0' };
 
-function buildPorts(elId, list, side) {
+function connSub(conn) {
+  if (conn === 'USB-C 3.0') return 'full pinout';
+  if (conn === 'Lightning') return 'data + power';
+  if (CONN[conn].includes('ss2')) return 'USB 3, both SS pairs';
+  if (CONN[conn].includes('ss1')) return 'USB 3, 1 SS pair';
+  return 'USB 2.0 only';
+}
+function buildPorts(elId, groupsOrList, side) {
   const box = document.getElementById(elId);
   box.innerHTML = '';
-  list.forEach(conn => {
-    const el = document.createElement('div');
-    el.className = 'port' + (selected[side] === conn ? ' active' : '');
-    el.dataset.conn = conn; el.dataset.side = side;
-    const sub = CONN[conn].includes('ss1')
-      ? (CONN[conn].includes('ss2') ? 'full pinout' : 'USB 3, 1 lane')
-      : 'USB 2.0 only';
-    el.innerHTML = conn + '<small>' + sub + '</small>';
-    el.addEventListener('click', () => {
-      selected[side] = conn;
-      buildPorts(elId, list, side);
-      applyConstraints();
-      clearResult();
+  // Accept either a flat list or a {groupName: [connectors]} object
+  const groups = Array.isArray(groupsOrList)
+    ? { '': groupsOrList }
+    : groupsOrList;
+  Object.entries(groups).forEach(([groupName, list]) => {
+    if (groupName) {
+      const lbl = document.createElement('div');
+      lbl.className = 'port-group-label';
+      lbl.textContent = groupName;
+      box.appendChild(lbl);
+    }
+    list.forEach(conn => {
+      const el = document.createElement('div');
+      el.className = 'port' + (selected[side] === conn ? ' active' : '');
+      el.dataset.conn = conn; el.dataset.side = side;
+      el.innerHTML = conn + '<small>' + connSub(conn) + '</small>';
+      el.addEventListener('click', () => {
+        selected[side] = conn;
+        buildPorts(elId, groupsOrList, side);
+        applyConstraints();
+        clearResult();
+      });
+      box.appendChild(el);
     });
-    box.appendChild(el);
   });
 }
 
@@ -505,18 +560,19 @@ function clearResult() {
 
 document.getElementById('submit').addEventListener('click', () => render(identify()));
 
-// ---- Example presets: set USB-C on both ends, light a known pattern, show the result ----
+// ---- Example presets ----
+// left/right set the connector selection; types sets which pins light.
 const PRESETS = [
-  { label: 'Charge-only',        types: ['gnd','vbus'] },
-  { label: 'USB 2.0',            types: ['gnd','vbus','cc','d'] },
-  { label: 'USB 3 (1 lane)',     types: ['gnd','vbus','cc','d','ss1'] },
-  { label: 'USB-C full / TB',    types: ['gnd','vbus','cc','d','ss1','ss2','sbu'] },
+  { label: 'Charge-only',       left: 'USB-A 2.0',  right: 'USB-C 3.0',   types: ['gnd','vbus'] },
+  { label: 'USB 2.0',           left: 'USB-A 2.0',  right: 'Micro-B 2.0', types: ['gnd','vbus','d'] },
+  { label: 'USB 3 (1 lane)',    left: 'USB-A 3.0',  right: 'Micro-B 3.0', types: ['gnd','vbus','d','ss1'] },
+  { label: 'USB-C full / TB',   left: 'USB-C 3.0',  right: 'USB-C 3.0',   types: ['gnd','vbus','cc','d','ss1','ss2','sbu'] },
 ];
-function applyPreset(typesArr) {
-  const types = new Set(typesArr);
-  selected.left = 'USB-C 3.0'; selected.right = 'USB-C 3.0';
-  buildPorts('ports-left', ports.left, 'left');
-  buildPorts('ports-right', ports.right, 'right');
+function applyPreset(pre) {
+  const types = new Set(pre.types);
+  selected.left = pre.left; selected.right = pre.right;
+  buildPorts('ports-left', portGroups.left, 'left');
+  buildPorts('ports-right', portGroups.right, 'right');
   applyConstraints();
   lit.clear();
   document.querySelectorAll('.pill').forEach(el => {
@@ -531,7 +587,7 @@ const presetBox = document.getElementById('presets');
 PRESETS.forEach(pre => {
   const b = document.createElement('button');
   b.className = 'preset'; b.textContent = pre.label;
-  b.addEventListener('click', () => applyPreset(pre.types));
+  b.addEventListener('click', () => applyPreset(pre));
   presetBox.appendChild(b);
 });
 
@@ -561,9 +617,22 @@ document.getElementById('reset').addEventListener('click', () => {
   clearResult();
 });
 
-buildPorts('ports-left', ports.left, 'left');
-buildPorts('ports-right', ports.right, 'right');
+buildPorts('ports-left', portGroups.left, 'left');
+buildPorts('ports-right', portGroups.right, 'right');
 applyConstraints();
+
+// ---- Theme toggle ----
+const themeBtn = document.getElementById('themeToggle');
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  themeBtn.textContent = theme === 'light' ? 'Dark' : 'Light';
+}
+applyTheme(localStorage.getItem('theme') || 'dark');
+themeBtn.addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  localStorage.setItem('theme', next);
+  applyTheme(next);
+});
 </script>
 </body>
 </html>
